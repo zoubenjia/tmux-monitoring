@@ -1,0 +1,42 @@
+# Backup files
+*.backup.*
+CLAUDE.md.backup.*
+.CLAUDE.md.swp
+
+# Temporary directories
+old_files_*
+old_monitors_*
+.tmp/
+.temp/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.keystore
+
+# OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
