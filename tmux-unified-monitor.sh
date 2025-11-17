@@ -98,21 +98,21 @@ log() {
 get_process_info() {
     local pane_pid="$1"
     local all_commands=""
-    
+
     # 主进程
     local main_process=$(ps -p "$pane_pid" -o command= 2>/dev/null)
     all_commands+="$main_process "
-    
+
     # 递归查找子进程（使用 ps 和 awk，更可靠）
     find_children_recursive() {
         local parent_pid="$1"
         local depth="$2"
-        
+
         [[ "$depth" -gt 4 ]] && return
-        
+
         # 使用 ps 和 awk 查找所有子进程
         local children=$(ps -o pid,ppid,command | awk -v parent="$parent_pid" '$2 == parent {print $1}')
-        
+
         for child_pid in $children; do
             if [[ -n "$child_pid" ]] && [[ "$child_pid" != "PID" ]]; then
                 local child_cmd=$(ps -p "$child_pid" -o command= 2>/dev/null)
@@ -121,10 +121,45 @@ get_process_info() {
             fi
         done
     }
-    
+
     find_children_recursive "$pane_pid" 1
-    
+
     echo "$all_commands"
+}
+
+# 获取 Claude/Q 进程的 CPU 使用率
+get_claude_cpu() {
+    local pane_pid="$1"
+
+    # 递归查找所有子进程
+    find_all_pids() {
+        local parent_pid="$1"
+        local depth="$2"
+
+        [[ "$depth" -gt 4 ]] && return
+
+        local children=$(ps -o pid,ppid | awk -v parent="$parent_pid" '$2 == parent {print $1}')
+
+        for child_pid in $children; do
+            if [[ -n "$child_pid" ]] && [[ "$child_pid" != "PID" ]]; then
+                echo "$child_pid"
+                find_all_pids "$child_pid" $((depth + 1))
+            fi
+        done
+    }
+
+    # 查找 Claude 或 Q 进程
+    for pid in $pane_pid $(find_all_pids "$pane_pid" 1); do
+        cmd=$(ps -p "$pid" -o command= 2>/dev/null)
+        if echo "$cmd" | grep -qi "claude.*--verbose\|claude.*--permission-mode\|/q.*chat\|Amazon.*Q"; then
+            # 获取 CPU 使用率
+            cpu=$(ps -p "$pid" -o %cpu= 2>/dev/null | awk '{print int($1)}')
+            echo "$cpu"
+            return
+        fi
+    done
+
+    echo "0"
 }
 
 # 检测程序类型
@@ -170,42 +205,56 @@ while true; do
     
     for window_info in $windows; do
         IFS=':' read -r window_id pane_pid <<< "$window_info"
-        
+
         # 检查是否应该跳过这个窗口（SSH 等正在处理）
         skip=$(tmux show-window-option -t "$window_id" -qv @monitor_skip 2>/dev/null)
         [[ "$skip" == "1" ]] && continue
-        
+
         # 获取进程信息
         process_info=$(get_process_info "$pane_pid")
-        
+
         # 检测程序类型
         program=$(detect_program "$process_info")
-        
+
         # 设置窗口名
         case "$program" in
             claude)
-                tmux rename-window -t "$window_id" "🤖 Claude" 2>/dev/null
+                # 获取 CPU 使用率来判断是否在工作
+                cpu=$(get_claude_cpu "$pane_pid")
+                if [[ $cpu -gt 5 ]]; then
+                    # CPU > 5%，正在思考
+                    tmux rename-window -t "$window_id" "💭c" 2>/dev/null
+                else
+                    # CPU <= 5%，等待输入
+                    tmux rename-window -t "$window_id" "🤖c" 2>/dev/null
+                fi
                 tmux set-window-option -t "$window_id" -q @monitor_skip 1 2>/dev/null
                 ;;
             amazon-q)
-                tmux rename-window -t "$window_id" "🤖 Q" 2>/dev/null
+                # Q 也检测 CPU
+                cpu=$(get_claude_cpu "$pane_pid")
+                if [[ $cpu -gt 5 ]]; then
+                    tmux rename-window -t "$window_id" "💭q" 2>/dev/null
+                else
+                    tmux rename-window -t "$window_id" "🤖q" 2>/dev/null
+                fi
                 tmux set-window-option -t "$window_id" -q @monitor_skip 1 2>/dev/null
                 ;;
             smth)
-                tmux rename-window -t "$window_id" "📡 SMTH" 2>/dev/null
+                tmux rename-window -t "$window_id" "📡s" 2>/dev/null
                 tmux set-window-option -t "$window_id" -q @monitor_skip 1 2>/dev/null
                 ;;
             vim)
-                tmux rename-window -t "$window_id" "✏️ vim" 2>/dev/null
+                tmux rename-window -t "$window_id" "✏️v" 2>/dev/null
                 ;;
             python)
-                tmux rename-window -t "$window_id" "🐍 python" 2>/dev/null
+                tmux rename-window -t "$window_id" "🐍p" 2>/dev/null
                 ;;
             docker)
-                tmux rename-window -t "$window_id" "🐋 docker" 2>/dev/null
+                tmux rename-window -t "$window_id" "🐋d" 2>/dev/null
                 ;;
             git)
-                tmux rename-window -t "$window_id" "📝 git" 2>/dev/null
+                tmux rename-window -t "$window_id" "📝g" 2>/dev/null
                 ;;
             *)
                 # 如果没有特殊程序，移除跳过标记
@@ -240,20 +289,15 @@ monitor_start() {
     
     # 创建守护进程脚本
     create_monitor_daemon
-    
+
     # 标记为启用
     touch "$MONITOR_ENABLED_FILE"
-    
-    # 创建增强版守护进程（如果不存在）
-    if [[ ! -f "$MONITOR_CONFIG_DIR/daemon_enhanced.sh" ]]; then
-        cp ~/.tmux-monitor/daemon_enhanced.sh "$MONITOR_CONFIG_DIR/daemon_enhanced.sh" 2>/dev/null
-    fi
-    
+
     # 启动守护进程（使用 nohup 避免终端控制序列问题）
-    nohup bash "$MONITOR_CONFIG_DIR/daemon_enhanced.sh" </dev/null >/dev/null 2>&1 &
+    nohup bash "$MONITOR_CONFIG_DIR/daemon.sh" </dev/null >/dev/null 2>&1 &
     local pid=$!
     echo "$pid" > "$MONITOR_PID_FILE"
-    
+
     echo "✅ Monitor started (PID: $pid)"
 }
 
