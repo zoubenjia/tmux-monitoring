@@ -241,7 +241,7 @@ while true; do
                 tmux set-window-option -t "$window_id" -q @monitor_skip 1 2>/dev/null
                 ;;
             smth)
-                tmux rename-window -t "$window_id" "📡s" 2>/dev/null
+                tmux rename-window -t "$window_id" "📡smth" 2>/dev/null
                 tmux set-window-option -t "$window_id" -q @monitor_skip 1 2>/dev/null
                 ;;
             vim)
