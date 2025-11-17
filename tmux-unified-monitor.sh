@@ -103,39 +103,39 @@ log() {
 
 # 发送通知函数
 send_notification() {
-    local window_id=\$1
-    local title=\$2
-    local message=\$3
+    local window_id=$1
+    local title=$2
+    local message=$3
 
     # 从 window_id 提取窗口索引（@1 -> 1）
-    local window_index=\$(tmux display-message -t "\$window_id" -p "#{window_index}" 2>/dev/null)
+    local window_index=$(tmux display-message -t "$window_id" -p '#{window_index}' 2>/dev/null)
 
-    local notification_file="$NOTIFICATION_DIR/window_\${window_index}"
-    local current_time=\$(date +%s)
+    local notification_file="$NOTIFICATION_DIR/window_${window_index}"
+    local current_time=$(date +%s)
     local last_notification_time=0
 
     # 检查冷却时间
-    if [[ -f "\$notification_file" ]]; then
-        last_notification_time=\$(cat "\$notification_file")
+    if [[ -f "$notification_file" ]]; then
+        last_notification_time=$(cat "$notification_file")
     fi
 
     # 如果在冷却时间内，不发送通知
-    if [[ \$((current_time - last_notification_time)) -lt $NOTIFICATION_COOLDOWN ]]; then
+    if [[ $((current_time - last_notification_time)) -lt $NOTIFICATION_COOLDOWN ]]; then
         return
     fi
 
     # 使用 terminal-notifier 发送通知
     if command -v terminal-notifier &> /dev/null; then
-        terminal-notifier -title "\$title" -message "\$message" -sound Glass &
+        terminal-notifier -title "$title" -message "$message" -sound Glass &
     else
         # 备用方案：使用 osascript
-        osascript -e "display notification \\"\$message\\" with title \\"\$title\\" sound name \\"Glass\\"" 2>/dev/null &
+        osascript -e "display notification \\"$message\\" with title \\"$title\\" sound name \\"Glass\\"" 2>/dev/null &
     fi
 
     # 记录通知时间
-    echo "\$current_time" > "\$notification_file"
+    echo "$current_time" > "$notification_file"
 
-    echo "[$(date '+%H:%M:%S')] 📢 通知: \$title - \$message" >> "$LOG_FILE"
+    echo "[$(date '+%H:%M:%S')] 📢 通知: $title - $message" >> "$LOG_FILE"
 }
 
 # 获取进程树（不使用终端控制序列）
@@ -267,52 +267,52 @@ while true; do
                 cpu=$(get_claude_cpu "$pane_pid")
 
                 # 状态文件用于跟踪变化
-                state_file="$STATE_DIR/\${window_id}"
-                current_state=\$(cat "\$state_file" 2>/dev/null | cut -d: -f1)
+                state_file="$STATE_DIR/${window_id}"
+                current_state=$(cat "$state_file" 2>/dev/null | cut -d: -f1)
 
-                if [[ \$cpu -gt 5 ]]; then
+                if [[ $cpu -gt 5 ]]; then
                     # CPU > 5%，正在思考
-                    tmux rename-window -t "\$window_id" "💭c" 2>/dev/null
-                    echo "working:\$(date +%s)" > "\$state_file"
+                    tmux rename-window -t "$window_id" "💭c" 2>/dev/null
+                    echo "working:$(date +%s)" > "$state_file"
                 else
                     # CPU <= 5%，等待输入
-                    tmux rename-window -t "\$window_id" "🤖c" 2>/dev/null
+                    tmux rename-window -t "$window_id" "🤖c" 2>/dev/null
 
                     # 如果之前是 working 状态，现在变成 waiting，发送通知
-                    if [[ "\$current_state" == "working" ]]; then
-                        window_index=\$(tmux display-message -t "\$window_id" -p "#{window_index}" 2>/dev/null)
-                        send_notification "\$window_id" "🤖 Claude 已完成" "窗口 \$window_index 等待输入"
+                    if [[ "$current_state" == "working" ]]; then
+                        window_index=$(tmux display-message -t "$window_id" -p '#{window_index}' 2>/dev/null)
+                        send_notification "$window_id" "🤖 Claude 已完成" "窗口 $window_index 等待输入"
                     fi
 
-                    echo "waiting:\$(date +%s)" > "\$state_file"
+                    echo "waiting:$(date +%s)" > "$state_file"
                 fi
-                tmux set-window-option -t "\$window_id" -q @monitor_skip 1 2>/dev/null
+                tmux set-window-option -t "$window_id" -q @monitor_skip 1 2>/dev/null
                 ;;
             amazon-q)
                 # Q 也检测 CPU
                 cpu=$(get_claude_cpu "$pane_pid")
 
                 # 状态文件用于跟踪变化
-                state_file="$STATE_DIR/\${window_id}"
-                current_state=\$(cat "\$state_file" 2>/dev/null | cut -d: -f1)
+                state_file="$STATE_DIR/${window_id}"
+                current_state=$(cat "$state_file" 2>/dev/null | cut -d: -f1)
 
-                if [[ \$cpu -gt 5 ]]; then
+                if [[ $cpu -gt 5 ]]; then
                     # CPU > 5%，正在思考
-                    tmux rename-window -t "\$window_id" "💭q" 2>/dev/null
-                    echo "working:\$(date +%s)" > "\$state_file"
+                    tmux rename-window -t "$window_id" "💭q" 2>/dev/null
+                    echo "working:$(date +%s)" > "$state_file"
                 else
                     # CPU <= 5%，等待输入
-                    tmux rename-window -t "\$window_id" "🤖q" 2>/dev/null
+                    tmux rename-window -t "$window_id" "🤖q" 2>/dev/null
 
                     # 如果之前是 working 状态，现在变成 waiting，发送通知
-                    if [[ "\$current_state" == "working" ]]; then
-                        window_index=\$(tmux display-message -t "\$window_id" -p "#{window_index}" 2>/dev/null)
-                        send_notification "\$window_id" "🤖 Amazon Q 已完成" "窗口 \$window_index 等待输入"
+                    if [[ "$current_state" == "working" ]]; then
+                        window_index=$(tmux display-message -t "$window_id" -p '#{window_index}' 2>/dev/null)
+                        send_notification "$window_id" "🤖 Amazon Q 已完成" "窗口 $window_index 等待输入"
                     fi
 
-                    echo "waiting:\$(date +%s)" > "\$state_file"
+                    echo "waiting:$(date +%s)" > "$state_file"
                 fi
-                tmux set-window-option -t "\$window_id" -q @monitor_skip 1 2>/dev/null
+                tmux set-window-option -t "$window_id" -q @monitor_skip 1 2>/dev/null
                 ;;
             smth)
                 tmux rename-window -t "$window_id" "📡smth" 2>/dev/null
